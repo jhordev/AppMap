@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      // Solo el dueño puede leer/escribir su doc
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Bloquea todo lo demás
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
