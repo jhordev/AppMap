@@ -35,6 +35,7 @@ final routeProvider = FutureProvider.family<Map<String, dynamic>, RouteParams>((
     origin: params.origin,
     destination: params.destination,
     travelMode: params.travelMode,
+    placeCategory: params.placeCategory,
   );
 });
 
@@ -46,7 +47,7 @@ class PlacesSearchParams {
   const PlacesSearchParams({
     required this.location,
     required this.category,
-    this.radius = 5000,
+    this.radius = 15000,
   });
 
   @override
@@ -72,11 +73,13 @@ class RouteParams {
   final LatLng origin;
   final LatLng destination;
   final String travelMode;
+  final String? placeCategory;
 
   const RouteParams({
     required this.origin,
     required this.destination,
     this.travelMode = 'driving',
+    this.placeCategory,
   });
 
   @override
@@ -87,7 +90,8 @@ class RouteParams {
         other.origin.longitude == origin.longitude &&
         other.destination.latitude == destination.latitude &&
         other.destination.longitude == destination.longitude &&
-        other.travelMode == travelMode;
+        other.travelMode == travelMode &&
+        other.placeCategory == placeCategory;
   }
 
   @override
@@ -96,6 +100,7 @@ class RouteParams {
         origin.longitude.hashCode ^
         destination.latitude.hashCode ^
         destination.longitude.hashCode ^
-        travelMode.hashCode;
+        travelMode.hashCode ^
+        placeCategory.hashCode;
   }
 }

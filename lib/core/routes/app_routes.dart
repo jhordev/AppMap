@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 import '../../features/auth/views/login_view.dart';
-import '../../features/home/views/home_view.dart';
+import '../../features/navigation/views/main_navigation_view.dart';
 import '../../features/auth/services/auth_provider.dart';
 
 // Route names
@@ -59,7 +59,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.home,
         name: 'home',
-        builder: (context, state) => const HomeView(),
+        builder: (context, state) => const MainNavigationView(),
       ),
     ],
   );

@@ -24,7 +24,7 @@ class PlaceModel {
     required this.category,
   });
 
-  factory PlaceModel.fromMap(Map<String, dynamic> map) {
+  factory PlaceModel.fromMap(Map<String, dynamic> map, {String? categoryOverride}) {
     final geometry = map['geometry'];
     final location = geometry['location'];
 
@@ -40,7 +40,7 @@ class PlaceModel {
       priceLevel: map['price_level'],
       photoUrl: _getPhotoUrl(map['photos']),
       isOpen: _getOpenStatus(map['opening_hours']),
-      category: _getCategory(map['types']),
+      category: categoryOverride ?? _getCategory(map['types']),
     );
   }
 

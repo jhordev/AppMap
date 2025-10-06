@@ -37,30 +37,45 @@ class PolylineUtils {
 
   /// Create a Polyline from route data
   static Polyline createRoutePolyline(Map<String, dynamic> routeData) {
-    final routes = routeData['routes'] as List<dynamic>?;
-    if (routes == null || routes.isEmpty) {
-      return const Polyline(polylineId: PolylineId('empty'), points: []);
+    List<LatLng> points = [];
+
+    // Intenta obtener polylinePoints directamente (formato de OSRM/DistanceService)
+    final polylinePoints = routeData['polylinePoints'] as List<dynamic>?;
+    if (polylinePoints != null && polylinePoints.isNotEmpty) {
+      points = polylinePoints.map((point) {
+        return LatLng(
+          (point['lat'] as num).toDouble(),
+          (point['lng'] as num).toDouble(),
+        );
+      }).toList();
+    } else {
+      // Fallback: formato antiguo de Google Directions API
+      final routes = routeData['routes'] as List<dynamic>?;
+      if (routes == null || routes.isEmpty) {
+        return const Polyline(polylineId: PolylineId('empty'), points: []);
+      }
+
+      final route = routes.first;
+      final overviewPolyline = route['overview_polyline'];
+      if (overviewPolyline != null) {
+        final encodedPolyline = overviewPolyline['points'] as String?;
+        if (encodedPolyline != null) {
+          points = decodePolyline(encodedPolyline);
+        }
+      }
     }
 
-    final route = routes.first;
-    final overviewPolyline = route['overview_polyline'];
-    if (overviewPolyline == null) {
+    if (points.isEmpty) {
       return const Polyline(polylineId: PolylineId('empty'), points: []);
     }
-
-    final encodedPolyline = overviewPolyline['points'] as String?;
-    if (encodedPolyline == null) {
-      return const Polyline(polylineId: PolylineId('empty'), points: []);
-    }
-
-    final points = decodePolyline(encodedPolyline);
 
     return Polyline(
       polylineId: const PolylineId('route'),
       points: points,
       color: const Color(0xFF2196F3),
-      width: 4,
+      width: 5,
       patterns: [],
+      geodesic: true,
     );
   }
 

@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 
 enum PlaceCategory {
-  touristAttraction('Atracción turística', Icons.place, Colors.blue),
-  restaurant('Restaurante', Icons.restaurant, Colors.orange),
-  hotel('Hotel', Icons.hotel, Colors.green),
-  gasStation('Gasolinera', Icons.local_gas_station, Colors.red),
-  hospital('Hospital', Icons.local_hospital, Colors.pink),
-  bank('Banco', Icons.account_balance, Colors.purple);
+  // Acciones Deportivas y Recreativas
+  swimming('Natación', Icons.pool, Color(0xFF03A9F4)),
+  hiking('Caminata', Icons.hiking, Color(0xFF795548)),
+  trekking('Senderismo', Icons.terrain, Color(0xFF8D6E63)),
+  running('Correr', Icons.directions_run, Color(0xFF2196F3)),
+  cycling('Ciclismo', Icons.directions_bike, Color(0xFF00BCD4)),
+  football('Fútbol', Icons.sports_soccer, Color(0xFF4CAF50)),
+  basketball('Baloncesto', Icons.sports_basketball, Color(0xFFFF9800)),
+  volleyball('Voleibol', Icons.sports_volleyball, Color(0xFFE91E63)),
+  gym('Entrenamiento en Gimnasio', Icons.fitness_center, Color(0xFFE53935)),
+  yoga('Yoga y Meditación', Icons.self_improvement, Color(0xFF673AB7)),
+  sports('Deportes Varios', Icons.sports, Color(0xFF9C27B0)),
+  tourism('Turismo y Paseos', Icons.attractions, Color(0xFFFF5722));
 
   const PlaceCategory(this.displayName, this.icon, this.color);
   final String displayName;

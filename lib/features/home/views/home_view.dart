@@ -10,6 +10,7 @@ import '../../places/widgets/places_list_widget.dart';
 import '../../places/widgets/route_info_widget.dart';
 import '../../places/models/place_model.dart';
 import '../../places/providers/places_provider.dart';
+import '../../navigation/widgets/navigation_view.dart';
 import '../../../utils/logger.dart';
 
 class HomeView extends ConsumerStatefulWidget {
@@ -24,6 +25,8 @@ class _HomeViewState extends ConsumerState<HomeView> {
   final LocationService _locationService = LocationService();
   LatLng? _currentLocation;
   Set<Polyline> _polylines = {};
+  bool _isLoadingLocation = true;
+  bool _isMapReady = false;
 
   @override
   void initState() {
@@ -32,13 +35,46 @@ class _HomeViewState extends ConsumerState<HomeView> {
     _initializeLocation();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Escuchar cambios en el lugar seleccionado desde favoritos
+    _listenToSelectedPlace();
+  }
+
+  void _listenToSelectedPlace() {
+    final selectedPlace = ref.watch(selectedPlaceProvider);
+    if (selectedPlace != null && _mapController != null) {
+      // Centrar el mapa en el lugar seleccionado
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (_mapController != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLngZoom(selectedPlace.location, 16.0),
+          );
+        }
+      });
+    }
+  }
+
   Future<void> _initializeLocation() async {
     final location = await _locationService.getCurrentLocation();
     if (location != null && mounted) {
       setState(() {
         _currentLocation = location;
+        _isLoadingLocation = false;
       });
       ref.read(userLocationProvider.notifier).state = location;
+
+      // Centrar el mapa en la ubicación del usuario una vez que esté listo
+      if (_mapController != null) {
+        _mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(location, 15.0),
+        );
+      }
+    } else if (mounted) {
+      setState(() {
+        _isLoadingLocation = false;
+      });
     }
   }
 
@@ -47,14 +83,13 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final currentUserAsync = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: _buildModernAppBar(context, currentUserAsync),
       body: currentUserAsync.when(
         loading: () => const Center(
           child: CircularProgressIndicator(),
         ),
         error: (error, stack) => _buildErrorState(context, error),
         data: (user) => user != null
-            ? _buildMapContent(context)
+            ? _buildMapContent(context, user)
             : const Center(
           child: Text(
             'No hay usuario autenticado',
@@ -319,86 +354,152 @@ class _HomeViewState extends ConsumerState<HomeView> {
     );
   }
 
-  Widget _buildMapContent(BuildContext context) {
+  Widget _buildMapContent(BuildContext context, dynamic user) {
     final selectedCategory = ref.watch(selectedCategoryProvider);
     final selectedPlace = ref.watch(selectedPlaceProvider);
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
-            Theme.of(context).colorScheme.surface,
-          ],
+    // Mostrar loading mientras se obtiene la ubicación
+    if (_isLoadingLocation) {
+      return Container(
+        color: Theme.of(context).colorScheme.surface,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Obteniendo tu ubicación...',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      child: SafeArea(
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Explora tu ubicación',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                      FloatingActionButton(
-                        mini: true,
-                        onPressed: _showCategoryBottomSheet,
-                        child: const Icon(Icons.explore),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+      );
+    }
+
+    return Stack(
+      children: [
+        // Mapa a pantalla completa
+        _buildEnhancedMap(),
+
+        // Botón flotante para seleccionar categoría
+        Positioned(
+          top: 16,
+          left: 16,
+          right: 16,
+          child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.15),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _showCategoryBottomSheet,
+                    borderRadius: BorderRadius.circular(30),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              selectedCategory?.icon ?? Icons.explore,
+                              color: Theme.of(context).colorScheme.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  selectedCategory != null
+                                      ? selectedCategory.displayName
+                                      : 'Seleccionar actividad',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (selectedCategory != null)
+                                  Text(
+                                    'Toca para cambiar',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                           ),
                         ],
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: _buildEnhancedMap(),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-            // Overlay for places list or route info
-            if (selectedCategory != null && _currentLocation != null)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: _buildPlacesOverlay(selectedCategory),
-              ),
-            // Overlay for selected place route info
-            if (selectedPlace != null)
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: _buildRouteInfoOverlay(selectedPlace),
-              ),
-          ],
         ),
-      ),
+
+        // Botón de ubicación actual
+        Positioned(
+          right: 16,
+          bottom: selectedCategory != null || selectedPlace != null ? 280 : 100,
+          child: SafeArea(
+            child: FloatingActionButton(
+              heroTag: 'location_btn',
+              onPressed: _centerOnUserLocation,
+              child: const Icon(Icons.my_location),
+            ),
+          ),
+        ),
+
+        // Overlay for places list
+        if (selectedCategory != null && _currentLocation != null && _isMapReady)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildPlacesOverlay(selectedCategory),
+          ),
+
+        // Overlay for selected place route info
+        if (selectedPlace != null)
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildRouteInfoOverlay(selectedPlace),
+          ),
+      ],
     );
+  }
+
+  void _centerOnUserLocation() {
+    if (_currentLocation != null && _mapController != null) {
+      _mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(_currentLocation!, 15.0),
+      );
+    }
   }
 
   void _showProfileDialog(BuildContext context, user) {
@@ -519,6 +620,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
   Widget _buildEnhancedMap() {
     final selectedCategory = ref.watch(selectedCategoryProvider);
+    final selectedPlace = ref.watch(selectedPlaceProvider);
     final userLocation = ref.watch(userLocationProvider);
 
     if (selectedCategory != null && userLocation != null) {
@@ -526,20 +628,64 @@ class _HomeViewState extends ConsumerState<HomeView> {
         PlacesSearchParams(
           location: userLocation,
           category: selectedCategory,
-          radius: 5000,
+          radius: 10000,
         ),
       ));
 
       return placesAsync.when(
-        loading: () => const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Buscando lugares...'),
-            ],
-          ),
+        loading: () => Stack(
+          children: [
+            // Mostrar el mapa con la ubicación del usuario mientras carga
+            EnhancedMapWidget(
+              initialPosition: userLocation,
+              selectedPlace: selectedPlace,
+              polylines: _polylines,
+              onMapCreated: _onMapCreated,
+              onTap: _onMapTap,
+            ),
+            // Overlay de carga elegante
+            Positioned(
+              top: 100,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Buscando lugares...',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         error: (error, stack) => Center(
           child: Column(
@@ -554,6 +700,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
         data: (places) => EnhancedMapWidget(
           initialPosition: userLocation,
           places: places,
+          selectedPlace: selectedPlace,
           polylines: _polylines,
           onMapCreated: _onMapCreated,
           onTap: _onMapTap,
@@ -564,6 +711,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
     return EnhancedMapWidget(
       initialPosition: _currentLocation,
+      selectedPlace: selectedPlace,
       polylines: _polylines,
       onMapCreated: _onMapCreated,
       onTap: _onMapTap,
@@ -578,23 +726,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
       PlacesSearchParams(
         location: userLocation,
         category: category,
+        radius: 10000,
       ),
     ));
 
     return placesAsync.when(
-      loading: () => Container(
-        height: 200,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
-          ),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      ),
+      loading: () => const SizedBox.shrink(), // No mostrar nada mientras carga
       error: (error, stack) => Container(
         height: 200,
         decoration: BoxDecoration(
@@ -623,6 +760,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
       RouteParams(
         origin: userLocation,
         destination: place.location,
+        placeCategory: place.category,
       ),
     ));
 
@@ -690,14 +828,55 @@ class _HomeViewState extends ConsumerState<HomeView> {
     });
   }
 
-  void _startNavigation(PlaceModel place) {
-    // Here you can implement navigation functionality
-    // For example, open Google Maps with directions
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Navegando a ${place.name}'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+  void _startNavigation(PlaceModel place) async {
+    final userLocation = ref.read(userLocationProvider);
+    if (userLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo obtener tu ubicación'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final routeAsync = ref.read(routeProvider(
+      RouteParams(
+        origin: userLocation,
+        destination: place.location,
+        placeCategory: place.category,
       ),
+    ));
+
+    routeAsync.when(
+      loading: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Calculando ruta...'),
+          ),
+        );
+      },
+      error: (error, stack) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al calcular ruta: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      },
+      data: (routeData) {
+        // Navegar a la vista de navegación
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NavigationView(
+              destination: place,
+              origin: userLocation,
+              routeData: routeData,
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -716,6 +895,158 @@ class _HomeViewState extends ConsumerState<HomeView> {
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     Logger.info('Enhanced Map created successfully');
+
+    // Si ya tenemos la ubicación del usuario, centrar el mapa
+    if (_currentLocation != null) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _mapController?.animateCamera(
+            CameraUpdate.newLatLngZoom(_currentLocation!, 15.0),
+          );
+          setState(() {
+            _isMapReady = true;
+          });
+        }
+      });
+    } else {
+      // Si aún no hay ubicación, marcar el mapa como listo de todas formas
+      setState(() {
+        _isMapReady = true;
+      });
+    }
+  }
+
+  Widget _buildFloatingProfileButton(BuildContext context, dynamic user) {
+    return PopupMenuButton<String>(
+      offset: const Offset(0, 56),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Theme.of(context).colorScheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+            width: 2,
+          ),
+        ),
+        child: CircleAvatar(
+          radius: 22,
+          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+          backgroundImage: user.photoURL != null
+              ? NetworkImage(user.photoURL!)
+              : null,
+          child: user.photoURL == null
+              ? Text(
+            user.displayName.isNotEmpty
+                ? user.displayName[0].toUpperCase()
+                : user.email[0].toUpperCase(),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          )
+              : null,
+        ),
+      ),
+      itemBuilder: (BuildContext context) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                user.displayName.isNotEmpty ? user.displayName : 'Usuario',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                user.email,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                  fontSize: 14,
+                ),
+              ),
+              const Divider(height: 20),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'profile',
+          child: Row(
+            children: [
+              Icon(
+                Icons.person_outline,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              const Text('Perfil'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'settings',
+          child: Row(
+            children: [
+              Icon(
+                Icons.settings_outlined,
+                size: 20,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              const Text('Configuración'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(
+                Icons.logout,
+                size: 20,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Cerrar sesión',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      onSelected: (String value) {
+        switch (value) {
+          case 'profile':
+            _showProfileDialog(context, user);
+            break;
+          case 'settings':
+            _showFeatureComingSoon(context, 'Configuración');
+            break;
+          case 'logout':
+            _showSignOutDialog(context);
+            break;
+        }
+      },
+    );
   }
 
   void _showSignOutDialog(BuildContext context) {
