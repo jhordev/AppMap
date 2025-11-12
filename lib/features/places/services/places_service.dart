@@ -485,14 +485,13 @@ class PlacesService {
     String? placeCategory,
   }) async {
     try {
-      // Detectar modo de transporte según la categoría del lugar
-      final detectedMode = _detectTravelMode(placeCategory, travelMode);
-
-      // Usar el servicio propio de cálculo de distancias
+      // CORRECCIÓN: Usar directamente el modo de transporte seleccionado por el usuario
+      // NO sobreescribir con detección automática
+      // El usuario tiene control total sobre el modo de transporte
       return DistanceService.getRouteInfo(
         origin: origin,
         destination: destination,
-        travelMode: detectedMode,
+        travelMode: travelMode, // Usar el modo seleccionado directamente
       );
     } catch (error) {
       throw Exception('Error getting directions: $error');

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/place_model.dart';
+import '../models/travel_mode.dart';
+import '../providers/places_provider.dart';
 
-class RouteInfoWidget extends StatelessWidget {
+class RouteInfoWidget extends ConsumerWidget {
   final PlaceModel selectedPlace;
   final Map<String, dynamic>? routeData;
   final VoidCallback? onClose;
   final VoidCallback? onStartNavigation;
+  final Function(TravelMode)? onTravelModeChanged;
 
   const RouteInfoWidget({
     super.key,
@@ -13,10 +17,13 @@ class RouteInfoWidget extends StatelessWidget {
     this.routeData,
     this.onClose,
     this.onStartNavigation,
+    this.onTravelModeChanged,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedTravelMode = ref.watch(selectedTravelModeProvider);
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -152,6 +159,9 @@ class RouteInfoWidget extends StatelessWidget {
                     ],
                   ],
                 ),
+                const SizedBox(height: 16),
+                // Selector de medio de transporte
+                _buildTravelModeSelector(context, ref, selectedTravelMode),
                 const SizedBox(height: 12),
                 // Botón compacto
                 SizedBox(
@@ -172,6 +182,106 @@ class RouteInfoWidget extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Construye el selector de modos de transporte
+  Widget _buildTravelModeSelector(
+    BuildContext context,
+    WidgetRef ref,
+    TravelMode selectedMode,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '¿Cómo llegarás?',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: TravelMode.values.map((mode) {
+            final isSelected = mode == selectedMode;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: _buildTravelModeChip(
+                  context,
+                  ref,
+                  mode,
+                  isSelected,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  /// Construye un chip de modo de transporte
+  Widget _buildTravelModeChip(
+    BuildContext context,
+    WidgetRef ref,
+    TravelMode mode,
+    bool isSelected,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          ref.read(selectedTravelModeProvider.notifier).state = mode;
+          if (onTravelModeChanged != null) {
+            onTravelModeChanged!(mode);
+          }
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? mode.color.withValues(alpha: 0.15)
+                : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? mode.color
+                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                mode.icon,
+                size: 24,
+                color: isSelected
+                    ? mode.color
+                    : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                mode.displayName,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? mode.color
+                      : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                  fontSize: 10,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

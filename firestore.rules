@@ -6,6 +6,30 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Reglas para calificaciones de lugares
+    match /place_ratings/{ratingId} {
+      // Cualquier usuario autenticado puede leer todas las calificaciones
+      allow read: if request.auth != null;
+
+      // Solo usuarios autenticados pueden crear calificaciones
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+
+      // Solo el autor puede actualizar o eliminar su propia calificación
+      allow update, delete: if request.auth != null
+                            && resource.data.userId == request.auth.uid;
+    }
+
+    // Reglas para estadísticas de calificaciones
+    match /place_rating_stats/{placeId} {
+      // Cualquier usuario autenticado puede leer las estadísticas
+      allow read: if request.auth != null;
+
+      // Permitir escritura para actualizar estadísticas
+      // Esto es necesario porque el servicio actualiza las estadísticas después de cada calificación
+      allow write: if request.auth != null;
+    }
+
     // Bloquea todo lo demás
     match /{document=**} {
       allow read, write: if false;

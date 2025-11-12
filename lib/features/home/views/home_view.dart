@@ -9,6 +9,7 @@ import '../../places/widgets/category_bottom_sheet.dart';
 import '../../places/widgets/places_list_widget.dart';
 import '../../places/widgets/route_info_widget.dart';
 import '../../places/models/place_model.dart';
+import '../../places/models/travel_mode.dart';
 import '../../places/providers/places_provider.dart';
 import '../../navigation/widgets/navigation_view.dart';
 import '../../../utils/logger.dart';
@@ -754,12 +755,14 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
   Widget _buildRouteInfoOverlay(PlaceModel place) {
     final userLocation = ref.watch(userLocationProvider);
+    final selectedTravelMode = ref.watch(selectedTravelModeProvider);
     if (userLocation == null) return const SizedBox.shrink();
 
     final routeAsync = ref.watch(routeProvider(
       RouteParams(
         origin: userLocation,
         destination: place.location,
+        travelMode: selectedTravelMode.apiValue,
         placeCategory: place.category,
       ),
     ));
@@ -786,6 +789,11 @@ class _HomeViewState extends ConsumerState<HomeView> {
           routeData: routeData,
           onClose: _clearSelectedPlace,
           onStartNavigation: () => _startNavigation(place),
+          onTravelModeChanged: (mode) {
+            // Invalidar el routeProvider para forzar el recálculo de la ruta
+            // con el nuevo modo de transporte
+            ref.invalidate(routeProvider);
+          },
         );
       },
     );
@@ -830,6 +838,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
   void _startNavigation(PlaceModel place) async {
     final userLocation = ref.read(userLocationProvider);
+    final selectedTravelMode = ref.read(selectedTravelModeProvider);
     if (userLocation == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -844,6 +853,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
       RouteParams(
         origin: userLocation,
         destination: place.location,
+        travelMode: selectedTravelMode.apiValue,
         placeCategory: place.category,
       ),
     ));

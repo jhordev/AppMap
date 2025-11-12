@@ -5,6 +5,7 @@ import '../providers/places_provider.dart';
 import 'place_detail_sheet.dart';
 import 'category_bottom_sheet.dart';
 import '../../favorites/widgets/favorite_button.dart';
+import '../../ratings/widgets/rating_display.dart';
 
 class PlacesListWidget extends ConsumerStatefulWidget {
   final List<PlaceModel> places;
@@ -424,7 +425,9 @@ class _PlacesListWidgetState extends ConsumerState<PlacesListWidget>
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           if (place.rating != null) ...[
                             Container(
@@ -453,8 +456,22 @@ class _PlacesListWidgetState extends ConsumerState<PlacesListWidget>
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 6),
                           ],
+                          // Rating de la comunidad
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: RatingDisplay(
+                              placeId: place.id,
+                              iconSize: 14,
+                              fontSize: 11,
+                              showCount: false,
+                              showLabel: false,
+                            ),
+                          ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                             decoration: BoxDecoration(

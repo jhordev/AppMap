@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/place_model.dart';
 import '../services/places_service.dart';
 import '../../../utils/logger.dart';
+import '../../ratings/widgets/rating_display.dart';
+import '../../ratings/widgets/rating_bottom_sheet.dart';
+import '../../ratings/widgets/user_review_card.dart';
+import '../../ratings/providers/ratings_provider.dart';
+import '../../ratings/views/all_reviews_view.dart';
+import '../../auth/services/auth_provider.dart';
 
-class PlaceDetailSheet extends StatefulWidget {
+class PlaceDetailSheet extends ConsumerStatefulWidget {
   final PlaceModel place;
   final VoidCallback? onClose;
   final VoidCallback? onNavigate;
@@ -17,10 +24,10 @@ class PlaceDetailSheet extends StatefulWidget {
   });
 
   @override
-  State<PlaceDetailSheet> createState() => _PlaceDetailSheetState();
+  ConsumerState<PlaceDetailSheet> createState() => _PlaceDetailSheetState();
 }
 
-class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
+class _PlaceDetailSheetState extends ConsumerState<PlaceDetailSheet> {
   final PlacesService _placesService = PlacesService();
   Map<String, dynamic>? _placeDetails;
   bool _isLoading = true;
@@ -167,7 +174,7 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                 ),
                 const SizedBox(height: 8),
 
-                // Rating
+                // Rating de Google Maps
                 if (widget.place.rating != null) ...[
                   Row(
                     children: [
@@ -192,10 +199,34 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                           ),
                         ),
                       ],
+                      const SizedBox(width: 4),
+                      Text(
+                        'Google',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 8),
                 ],
+
+                // Rating de la comunidad AppMap
+                Row(
+                  children: [
+                    RatingDisplay(
+                      placeId: widget.place.id,
+                      iconSize: 20,
+                      fontSize: 16,
+                      showLabel: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Botón para calificar
+                _buildRateButton(),
+                const SizedBox(height: 16),
 
                 // Description
                 if (_placeDetails?['editorial_summary']?['overview'] != null) ...[
@@ -257,13 +288,32 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
                   const SizedBox(height: 16),
                 ],
 
-                // Reviews
+                // Opiniones de usuarios (AppMap Community)
+                _buildCommunityReviews(),
+
+                // Divider
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16.0),
+                  child: Divider(),
+                ),
+
+                // Reviews de Google Maps
                 if (_placeDetails?['reviews'] != null) ...[
-                  Text(
-                    'Reseñas',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        'Reseñas de Google',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.open_in_new,
+                        size: 16,
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   ..._buildReviews(),
@@ -497,6 +547,184 @@ class _PlaceDetailSheetState extends State<PlaceDetailSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se pudo abrir el teléfono')),
+        );
+      }
+    }
+  }
+
+  /// Construye el botón para calificar el lugar
+  Widget _buildRateButton() {
+    final currentUserAsync = ref.watch(currentUserProvider);
+    final currentUserId = currentUserAsync.value?.id;
+
+    if (currentUserId == null) {
+      return const SizedBox.shrink();
+    }
+
+    final userRatingAsync = ref.watch(
+      userRatingProvider(
+        UserRatingParams(userId: currentUserId, placeId: widget.place.id),
+      ),
+    );
+
+    return userRatingAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (error, stack) => const SizedBox.shrink(),
+      data: (existingRating) {
+        return OutlinedButton.icon(
+          onPressed: () {
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => RatingBottomSheet(
+                placeId: widget.place.id,
+                placeName: widget.place.name,
+                existingRating: existingRating,
+              ),
+            );
+          },
+          icon: Icon(
+            existingRating != null ? Icons.edit : Icons.star_border,
+            size: 20,
+          ),
+          label: Text(
+            existingRating != null ? 'Editar mi calificación' : 'Calificar este lugar',
+          ),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            side: BorderSide(
+              color: Theme.of(context).colorScheme.primary,
+              width: 1.5,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Construye la sección de opiniones de la comunidad
+  Widget _buildCommunityReviews() {
+    final recentRatingsAsync = ref.watch(
+      recentRatingsProvider(
+        RecentRatingsParams(placeId: widget.place.id, limit: 3),
+      ),
+    );
+
+    return recentRatingsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (error, stack) => const SizedBox.shrink(),
+      data: (ratings) {
+        if (ratings.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final currentUserId = ref.watch(currentUserProvider).value?.id;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Opiniones de usuarios',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AllReviewsView(
+                          placeId: widget.place.id,
+                          placeName: widget.place.name,
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Ver todas'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...ratings.map((rating) {
+              return UserReviewCard(
+                rating: rating,
+                showActions: true,
+                isCurrentUser: rating.userId == currentUserId,
+                onEdit: rating.userId == currentUserId
+                    ? () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => RatingBottomSheet(
+                            placeId: widget.place.id,
+                            placeName: widget.place.name,
+                            existingRating: rating,
+                          ),
+                        );
+                      }
+                    : null,
+                onDelete: rating.userId == currentUserId
+                    ? () => _deleteRating(rating)
+                    : null,
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Elimina una calificación
+  Future<void> _deleteRating(rating) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar calificación'),
+        content: const Text('¿Estás seguro de que quieres eliminar tu calificación?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final service = ref.read(ratingsServiceProvider);
+      await service.deleteRating(rating.id, rating.placeId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Calificación eliminada'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      Logger.error('Error deleting rating: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al eliminar: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

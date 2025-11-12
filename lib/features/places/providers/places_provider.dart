@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/place_model.dart';
+import '../models/travel_mode.dart';
 import '../services/places_service.dart';
 import '../widgets/category_bottom_sheet.dart';
 
@@ -27,6 +28,12 @@ final nearbyPlacesProvider = FutureProvider.family<List<PlaceModel>, PlacesSearc
 
 final selectedPlaceProvider = StateProvider<PlaceModel?>((ref) {
   return null;
+});
+
+/// Provider para el modo de transporte seleccionado por el usuario
+/// Por defecto es 'driving' (auto)
+final selectedTravelModeProvider = StateProvider<TravelMode>((ref) {
+  return TravelMode.driving;
 });
 
 final routeProvider = FutureProvider.family<Map<String, dynamic>, RouteParams>((ref, params) async {

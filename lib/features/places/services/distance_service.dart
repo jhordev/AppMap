@@ -65,8 +65,14 @@ class DistanceService {
         if (data['code'] == 'Ok' && data['routes'] != null && (data['routes'] as List).isNotEmpty) {
           final route = (data['routes'] as List)[0] as Map<String, dynamic>;
           final distanceInMeters = (route['distance'] as num).toDouble();
-          final durationInSeconds = (route['duration'] as num).round();
           final encodedPolyline = route['geometry'] as String;
+
+          // IMPORTANTE: Siempre recalcular la duración usando nuestras velocidades promedio
+          // NO usar la duración de OSRM, porque OSRM no diferencia entre auto y moto
+          final durationInSeconds = _estimateDuration(
+            distanceInMeters: distanceInMeters,
+            travelMode: travelMode,
+          );
 
           // Decodificar polyline
           final polylinePoints = PolylinePoints();
@@ -128,6 +134,7 @@ class DistanceService {
         return 'foot';
       case 'bicycling':
         return 'bike';
+      case 'motorcycle':
       case 'driving':
       case 'transit':
       default:
@@ -194,10 +201,11 @@ class DistanceService {
 
   /// Estima la duración del viaje según el modo de transporte
   /// Velocidades promedio realistas considerando condiciones urbanas:
-  /// - driving: 25 km/h (ciudad con tráfico) - 90 km/h en 3.6s = 25 m/s
-  /// - walking: 5 km/h - 18 km/h en 3.6s = 1.4 m/s
-  /// - bicycling: 15 km/h - 54 km/h en 3.6s = 4.2 m/s
-  /// - transit: 20 km/h (con paradas) - 72 km/h en 3.6s = 5.5 m/s
+  /// - walking: 5 km/h - velocidad de caminata normal
+  /// - bicycling: 12 km/h - bicicleta urbana con tráfico
+  /// - motorcycle: 35 km/h - moto en ciudad con tráfico
+  /// - driving: 30 km/h - auto en ciudad con tráfico
+  /// - transit: 20 km/h - transporte público con paradas
   static int _estimateDuration({
     required double distanceInMeters,
     required String travelMode,
@@ -207,12 +215,16 @@ class DistanceService {
 
     switch (travelMode.toLowerCase()) {
       case 'walking':
-        // Caminata normal: 5 km/h = 1.4 m/s
+        // Caminata normal: 5 km/h
         averageSpeedKmh = 5.0;
         break;
       case 'bicycling':
-        // Bicicleta urbana: 15 km/h = 4.2 m/s
-        averageSpeedKmh = 15.0;
+        // Bicicleta urbana: 12 km/h
+        averageSpeedKmh = 12.0;
+        break;
+      case 'motorcycle':
+        // Moto en ciudad: 35 km/h
+        averageSpeedKmh = 35.0;
         break;
       case 'transit':
         // Transporte público con paradas: 20 km/h
@@ -220,15 +232,8 @@ class DistanceService {
         break;
       case 'driving':
       default:
-        // Carro en ciudad con tráfico: 25 km/h = 6.9 m/s
-        // Distancias cortas (<2km): más lento por semáforos
-        if (distanceInKm < 2) {
-          averageSpeedKmh = 20.0; // 20 km/h para distancias cortas
-        } else if (distanceInKm < 10) {
-          averageSpeedKmh = 25.0; // 25 km/h para distancias medias
-        } else {
-          averageSpeedKmh = 40.0; // 40 km/h para distancias largas
-        }
+        // Auto en ciudad: 30 km/h
+        averageSpeedKmh = 30.0;
         break;
     }
 
@@ -236,12 +241,12 @@ class DistanceService {
     final durationInSeconds = (durationInHours * 3600).round();
 
     // Agregar tiempo base mínimo (semáforos, arranque, etc.)
-    // Para distancias cortas, agregar 30 segundos de tiempo base
+    // Para distancias cortas, agregar tiempo base
     int baseTime = 0;
-    if (distanceInKm < 1) {
-      baseTime = 30; // 30 segundos adicionales para distancias muy cortas
-    } else if (distanceInKm < 5) {
-      baseTime = 60; // 1 minuto adicional para distancias cortas
+    if (distanceInKm < 1 && travelMode.toLowerCase() != 'walking') {
+      baseTime = 30; // 30 segundos adicionales para distancias muy cortas en vehículos
+    } else if (distanceInKm < 5 && travelMode.toLowerCase() == 'driving') {
+      baseTime = 60; // 1 minuto adicional para autos en distancias cortas (más semáforos)
     }
 
     return durationInSeconds + baseTime;
